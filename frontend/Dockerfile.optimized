@@ -1,0 +1,52 @@
+# Optimized Dockerfile for production
+# Alternative if standalone build has issues
+
+FROM node:18-alpine AS base
+
+# Install dependencies only when needed
+FROM base AS deps
+WORKDIR /frontend
+COPY package*.json ./
+RUN npm ci --only=production && npm cache clean --force
+
+# Build stage
+FROM base AS builder
+WORKDIR /frontend
+COPY package*.json ./
+RUN npm ci
+COPY . .
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Build the application
+RUN npm run build
+
+# Production stage
+FROM base AS runner
+WORKDIR /frontend
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Copy necessary files
+COPY --from=builder /frontend/public ./public
+COPY --from=builder /frontend/.next ./.next
+COPY --from=builder /frontend/node_modules ./node_modules
+COPY --from=builder /frontend/package.json ./package.json
+COPY --from=builder /frontend/next.config.ts ./next.config.ts
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs && \
+    chown -R nextjs:nodejs /frontend
+
+USER nextjs
+
+EXPOSE 8023
+
+ENV PORT=8023
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["npm", "start"]
+

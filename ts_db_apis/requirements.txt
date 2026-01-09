@@ -1,0 +1,17 @@
+
+fastapi
+uvicorn
+psycopg2-binary
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+pydantic
+aiofiles
+requests
+fastapi[all]
+twilio
+Pillow
+pytz
+argon2-cffi
+email-validator
+jose

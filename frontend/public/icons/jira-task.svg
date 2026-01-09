@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+  <!-- Blue square background to match Jira style -->
+  <rect x="1" y="1" width="14" height="14" rx="3" fill="#1B90CA"/>
+  <!-- Document/page icon for task (avoids completion/tick confusion) -->
+  <rect x="4.2" y="3.8" width="7.6" height="8.4" rx="1" stroke="white" stroke-width="1.2"/>
+  <path d="M5.5 6h5M5.5 8h5M5.5 10h3.5" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
+</svg>
+

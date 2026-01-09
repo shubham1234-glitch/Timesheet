@@ -1,0 +1,239 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-poppins);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #ffffff;
+    --foreground: #000000;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 14px; /* Base font size - 14px */
+  line-height: 1.5;
+}
+
+/* Global rule: Ensure all text elements default to 14px and never exceed 15px */
+/* This will be overridden by specific classes but ensures base consistency */
+div, span, p, a, button, input, select, textarea, label, li, td, th {
+  font-size: 14px !important;
+}
+
+/* Override Tailwind text size classes to keep fonts between 14-15px only */
+.text-xs {
+  font-size: 12px !important;
+  line-height: 1.4;
+}
+
+.text-sm {
+  font-size: 14px !important;
+  line-height: 1.5;
+}
+
+.text-base {
+  font-size: 15px !important;
+  line-height: 1.5;
+}
+
+.text-lg {
+  font-size: 15px !important;
+  line-height: 1.5;
+}
+
+.text-xl {
+  font-size: 15px !important;
+  line-height: 1.5;
+}
+
+.text-2xl {
+  font-size: 15px !important;
+  line-height: 1.5;
+}
+
+.text-3xl {
+  font-size: 15px !important;
+  line-height: 1.5;
+}
+
+/* Headings - keep them small, max 15px */
+h1, .text-h1 {
+  font-size: 15px !important;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+h2, .text-h2 {
+  font-size: 15px !important;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+h3, .text-h3 {
+  font-size: 15px !important;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+h4, .text-h4 {
+  font-size: 14px !important;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+h5, .text-h5 {
+  font-size: 14px !important;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+h6, .text-h6 {
+  font-size: 14px !important;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+/* Tab switch animation */
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tab-switch-anim {
+  animation: fadeSlideIn 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-switch-anim {
+    animation: none !important;
+  }
+}
+
+/* Status dropdown color overrides */
+.ant-select-selection-item {
+  color: inherit !important;
+}
+
+.ant-select-item-option-selected .ant-select-item-option-content {
+  color: inherit !important;
+}
+
+/* Lighter table headers for tasks */
+.tasks-table .ant-table-thead > tr > th {
+  font-weight: 500; /* default is 600; make slightly lighter */
+}
+
+/* Task details - lighter subtask table headers */
+.subtasks-table .ant-table-thead > tr > th {
+  font-weight: 500;
+  font-size: 12px;
+}
+
+/* Enforce Poppins across app and Ant Design components */
+html, body, button, input, select, textarea,
+.ant-typography, .ant-btn, .ant-select, .ant-select-selector, .ant-input,
+.ant-input-number, .ant-picker, .ant-picker-input, .ant-table, .ant-tabs,
+.ant-radio, .ant-tag, .ant-badge {
+  font-family: var(--font-sans) !important;
+  font-size: 14px !important;
+}
+
+/* Ant Design component font size overrides */
+.ant-btn {
+  font-size: 14px !important;
+}
+
+.ant-input, .ant-input-number, .ant-picker-input input {
+  font-size: 14px !important;
+}
+
+.ant-select-selector {
+  font-size: 14px !important;
+}
+
+.ant-table {
+  font-size: 14px !important;
+}
+
+.ant-table-thead > tr > th {
+  font-size: 14px !important;
+}
+
+.ant-table-tbody > tr > td {
+  font-size: 14px !important;
+}
+
+.ant-tabs-tab {
+  font-size: 14px !important;
+}
+
+.ant-card-head-title {
+  font-size: 15px !important;
+}
+
+.ant-card-body {
+  font-size: 14px !important;
+}
+
+.ant-statistic-title {
+  font-size: 12px !important;
+}
+
+.ant-statistic-content {
+  font-size: 15px !important;
+}
+
+.ant-tag {
+  font-size: 12px !important;
+}
+
+.ant-badge {
+  font-size: 14px !important;
+}
+
+/* Sticky table headers for tasks tables */
+.sticky-header-table .ant-table-thead > tr > th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #fafafa;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.sticky-header-table .ant-table-thead > tr > th::before {
+  display: none;
+}
+
+/* Ensure sticky header works with horizontal scroll */
+.sticky-header-table .ant-table-container {
+  position: relative;
+}
+
+/* Reduce padding for My Dashboard tab in admin dashboard */
+.admin-my-dashboard-wrapper > div {
+  padding: 0.5rem !important;
+}
+
+/* Override red text color in InputNumber when error status is active */
+.estimated-hours-error .ant-input-number-input,
+.max-hours-error .ant-input-number-input {
+  color: #111827 !important; /* gray-900 */
+}

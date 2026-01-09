@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+
+  ts_api:
+    build:
+      context: .
+      dockerfile: ts_db_apis/Dockerfile
+    container_name: ts_api
+    ports:
+      - "8004:8004"
+    volumes:
+      - ./ts_db_apis:/ts_db_apis
+      - /opt/stage/src/utils:/opt/stage/src/utils
+      - /opt/stage/logs/time-sheet-logs/:/opt/stage/logs/time-sheet-logs/
+      - /var/www/fileServer:/var/www/fileServer
+    environment:
+      - PYTHONPATH=/ts_db_apis:/opt/stage/src
+    restart: always
+
+
+
+
+  timesheet_backend:
+    build:
+      context: /opt/stage/src/time-sheet/js_api/
+      dockerfile: /opt/stage/src/time-sheet/js_api/Dockerfile
+    container_name: timesheet_backend
+    env_file:
+      - /opt/stage/src/time-sheet/js_api/.env
+    ports:
+      - "8024:8024"
+    restart: always
+    
+    
+  webapp:
+    build:
+      context: /opt/stage/src/time-sheet/frontend
+      dockerfile: Dockerfile
+    container_name: ts-webapp
+    ports:
+      - "8023:8023"
+    depends_on:
+      - timesheet_backend
+    restart: unless-stopped
+
