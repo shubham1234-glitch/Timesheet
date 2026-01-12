@@ -341,33 +341,77 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ epicId, onCreated, onCa
       return;
     }
 
+    // epic_code is required when epicId is provided
+    if (epicId && !epicId.trim()) {
+      toast.error("Epic ID is required to create a task");
+      return;
+    }
+
     setLoading(true);
     try {
       const form = new FormData();
 
       // Required fields
-      form.append("task_title", taskTitle);
-      form.append("task_desc", description);
-      // Only append epic_code if epicId is provided
-      if (epicId) {
-      form.append("epic_code", String(epicId));
+      form.append("task_title", taskTitle.trim());
+      if (description && description.trim()) {
+        form.append("task_desc", description.trim());
       }
+      
+      // epic_code is required when creating from epic page
+      if (epicId) {
+        form.append("epic_code", String(epicId));
+      }
+      
       // Assignee is optional
       if (assignee && assignee.trim()) {
         form.append("assignee", assignee.trim().toUpperCase());
       }
+      
+      // Get assigned_team_code: prioritize from assignee, fallback to selected team
+      let teamCodeToSend: string | null = null;
+      if (assignee && assignee.trim()) {
+        try {
+          const md = getMasterDataFromCache<import("@/app/lib/masterData").MasterApiResponse>();
+          const employees = md?.data?.employees || [];
+          const assigneeCode = assignee.trim().toUpperCase();
+          const emp = employees.find((e: any) => String(e.user_code).toUpperCase() === assigneeCode);
+          if (emp?.team_code) {
+            teamCodeToSend = String(emp.team_code);
+          }
+        } catch {
+          // Ignore failures
+        }
+      }
+      // If no team_code from assignee, use selected team
+      if (!teamCodeToSend && team) {
+        teamCodeToSend = String(team).trim();
+      }
+      // Send assigned_team_code if we have one
+      if (teamCodeToSend) {
+        form.append("assigned_team_code", teamCodeToSend);
+      }
+      
       form.append("priority_code", String(priority));
       form.append("task_type_code", taskType);
-      form.append("work_mode", workMode);
-      // Due date is optional
-      if (dueDate) {
-        form.append("due_date", dayjs(dueDate).format("DD-MM-YYYY"));
+      
+      // work_mode is optional
+      if (workMode) {
+        form.append("work_mode", workMode);
       }
+      
+      // Dates are optional - use YYYY-MM-DD format (API accepts both DD-MM-YYYY and YYYY-MM-DD)
+      if (startDate) {
+        form.append("start_date", startDate.format("YYYY-MM-DD"));
+      }
+      if (dueDate) {
+        form.append("due_date", dueDate.format("YYYY-MM-DD"));
+      }
+      
       form.append("estimated_hours", String(estHours));
       // Required estimated_days: already validated to be > 0
       form.append("estimated_days", String(estimatedDays));
 
-      // Optional fields
+      // Reporter is optional - will be auto-determined if not provided
       try {
         const { getUserFromStorage } = await import("@/app/lib/auth/storage");
         const user = getUserFromStorage();
@@ -379,19 +423,14 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ epicId, onCreated, onCa
       // status_code is optional (defaults to STS001), but we'll set it explicitly
       form.append("status_code", "STS001");
 
-      // start_date is optional
-      if (startDate) {
-        form.append("start_date", dayjs(startDate).format("DD-MM-YYYY"));
-      }
-
       // Task dependencies: none from this single-task form (can be wired later)
       form.append("depends_on_task_ids", "");
 
       // attachments are optional
-      if (files.length) {
-        for (const f of files) {
+      if (files.length > 0) {
+        files.forEach((f) => {
           form.append("attachments", f);
-        }
+        });
       }
 
       await apiRequest("create_task", "POST", form);
@@ -402,7 +441,7 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ epicId, onCreated, onCa
       } else {
         // If no onCreated callback, redirect directly
         if (epicId) {
-        router.push(buildRoleHref(roleBase, `/epics?expandedEpic=${epicId}`));
+          router.push(buildRoleHref(roleBase, `/epics?expandedEpic=${epicId}`));
         } else {
           router.push(buildRoleHref(roleBase, `/tasks`));
         }
@@ -879,16 +918,19 @@ const CreateTaskForm: React.FC<CreateTaskFormProps> = ({ epicId, onCreated, onCa
         >
           Save as Template
         </Button>
-        {/* <Button
-          onClick={handleCreate}
-          type="primary"
-          loading={loading}
-          disabled={loading}
-          size="middle"
-          className="px-6 rounded-md bg-blue-600 hover:bg-blue-700"
-        >
-          {loading ? 'Creating...' : 'Create Task'}
-        </Button> */}
+        {/* Show "Create Task" button only when epicId is provided and hideCreateButton is not true */}
+        {epicId && !hideCreateButton && (
+          <Button
+            onClick={handleCreate}
+            type="primary"
+            loading={loading}
+            disabled={loading}
+            size="middle"
+            className="px-6 rounded-md bg-blue-600 hover:bg-blue-700"
+          >
+            {loading ? 'Creating...' : 'Create Task'}
+          </Button>
+        )}
       </div>
     </div>
   );

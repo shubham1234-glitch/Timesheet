@@ -680,44 +680,6 @@ export default function SubtaskDetailsPage() {
     }
   };
 
-  const handlePostChallenge = async () => {
-    if (!commentText.trim()) {
-      toast.error("Please enter a challenge description");
-      return;
-    }
-
-    try {
-      const numericSubtaskId = extractSubtaskId(subtaskIdParam);
-      const form = new FormData();
-      form.append("parent_type", "SUBTASK");
-      form.append("parent_code", String(numericSubtaskId));
-      
-      // Use first line (or first 100 chars) as title, full text as description
-      const lines = commentText.split('\n');
-      const challengeTitle = lines[0]?.trim().substring(0, 100) || commentText.substring(0, 100);
-      const challengeDescription = commentText;
-      
-      form.append("challenge_title", challengeTitle);
-      form.append("challenge_description", challengeDescription);
-
-      await apiRequest("create_challenge", "POST", form);
-      toast.success("Challenge added successfully");
-      setCommentText("");
-
-      // Refresh comments (challenges are displayed in the same list)
-      const commentsResp = await apiRequest<any>(`get_comments?parent_type=SUBTASK&parent_code=${encodeURIComponent(String(numericSubtaskId))}`, 'GET');
-      const commentItems = Array.isArray(commentsResp?.data) ? commentsResp.data : [];
-      const mappedComments: Comment[] = commentItems.map((c: any) => ({
-        text: c.text || c.comment_text || '',
-        author: c.author_name || c.commented_by_name || c.author_code || c.commented_by || 'User',
-        date: c.commented_at ? new Date(c.commented_at).toLocaleDateString() : new Date().toLocaleDateString(),
-      }));
-      setComments(mappedComments);
-    } catch (e: any) {
-      const errorMsg = e?.message || 'Failed to add challenge';
-      toast.error(errorMsg);
-    }
-  };
 
   const handleStatusChange = async (newStatus: SubtaskData['status']) => {
     if (isReadOnly) return;
@@ -790,7 +752,6 @@ export default function SubtaskDetailsPage() {
             commentText={commentText}
             onCommentTextChange={setCommentText}
             onPostComment={handlePostComment}
-            onPostChallenge={handlePostChallenge}
             comments={comments}
             isReadOnly={isReadOnly}
             status={subtaskData.status}

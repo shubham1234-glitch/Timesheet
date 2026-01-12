@@ -78,18 +78,7 @@ CREATE OR REPLACE VIEW sts_ts.view_timesheet_entry
     st.description AS subtask_description,
     COALESCE(sh_latest.status_code, st.status_code) AS subtask_status_code,
     sm_subtask.status_desc AS subtask_status_description,
-    COALESCE(sh_latest.priority_code, st.priority_code) AS subtask_priority_code,
-    pr_subtask.priority_desc AS subtask_priority_description,
-    COALESCE(sh_latest.work_mode, st.work_mode) AS subtask_work_mode,
-    COALESCE(sh_latest.assigned_team_code, subtask_assignee_user.team_code) AS subtask_team_code,
-    subtask_team.team_name AS subtask_assigned_team_name,
-    COALESCE(sh_latest.assignee, st.assignee) AS subtask_assignee,
-    um_subtask_assignee.user_name AS subtask_assignee_name,
-    COALESCE(sh_latest.start_date, st.start_date) AS subtask_start_date,
-    COALESCE(sh_latest.due_date, st.due_date) AS subtask_due_date,
     COALESCE(sh_latest.closed_on, st.closed_on) AS subtask_closed_on,
-    COALESCE(sh_latest.estimated_hours, st.estimated_hours) AS subtask_estimated_hours,
-    COALESCE(sh_latest.estimated_days, st.estimated_days) AS subtask_estimated_days,
     st.is_billable AS subtask_is_billable,
     st.task_id AS subtask_parent_task_id,
     t_subtask.task_title AS subtask_parent_task_title,
@@ -159,7 +148,13 @@ CREATE OR REPLACE VIEW sts_ts.view_timesheet_entry
                FROM timesheet_entry te_sum
               WHERE te_sum.task_code = te.task_code AND (te_sum.approval_status::text = ANY (ARRAY['APPROVED'::character varying, 'SUBMITTED'::character varying]::text[])))
             ELSE false
-        END AS task_is_overdue
+        END AS task_is_overdue,
+        CASE
+            WHEN te.task_code IS NOT NULL THEN ( SELECT COALESCE(sum(te_sum.total_hours), 0::numeric)
+               FROM timesheet_entry te_sum
+              WHERE te_sum.task_code = te.task_code AND te_sum.user_code = te.user_code)
+            ELSE NULL::numeric
+        END AS task_total_actual_hours
    FROM ( SELECT DISTINCT ON (te_inner.user_code, te_inner.entry_date, (COALESCE(te_inner.task_code::text, te_inner.activity_code::text, te_inner.ticket_code::text, te_inner.subtask_code::text, 'NO_PARENT'::text))) te_inner.id,
             te_inner.task_code,
             te_inner.epic_code,
@@ -259,24 +254,12 @@ CREATE OR REPLACE VIEW sts_ts.view_timesheet_entry
      LEFT JOIN sts_new.product_master pm_activity ON a.product_code::text = pm_activity.product_code::text
      LEFT JOIN subtasks st ON te.subtask_code = st.id
      LEFT JOIN LATERAL ( SELECT sh.status_code,
-            sh.priority_code,
-            sh.work_mode,
-            sh.assigned_team_code,
-            sh.assignee,
-            sh.start_date,
-            sh.due_date,
-            sh.closed_on,
-            sh.estimated_hours,
-            sh.estimated_days
+            sh.closed_on
            FROM subtask_hist sh
           WHERE sh.subtask_code = st.id
           ORDER BY sh.created_at DESC, sh.id DESC
          LIMIT 1) sh_latest ON true
      LEFT JOIN sts_new.status_master sm_subtask ON COALESCE(sh_latest.status_code, st.status_code)::text = sm_subtask.status_code::text
-     LEFT JOIN sts_new.tkt_priority_master pr_subtask ON COALESCE(sh_latest.priority_code, st.priority_code) = pr_subtask.priority_code
-     LEFT JOIN sts_new.user_master subtask_assignee_user ON COALESCE(sh_latest.assignee, st.assignee)::text = subtask_assignee_user.user_code::text
-     LEFT JOIN sts_new.team_master subtask_team ON COALESCE(sh_latest.assigned_team_code, subtask_assignee_user.team_code)::text = subtask_team.team_code::text
-     LEFT JOIN sts_new.user_master um_subtask_assignee ON COALESCE(sh_latest.assignee, st.assignee)::text = um_subtask_assignee.user_code::text
      LEFT JOIN tasks t_subtask ON st.task_id = t_subtask.id
      LEFT JOIN sts_new.ticket_master tkt ON te.ticket_code = tkt.ticket_code
      LEFT JOIN LATERAL ( SELECT DISTINCT ON (sh_inner.ticket_code) sh_inner.ticket_code,

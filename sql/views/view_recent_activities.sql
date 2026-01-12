@@ -725,7 +725,7 @@ CREATE OR REPLACE VIEW sts_ts.view_recent_activities
                     WHEN lower(TRIM(BOTH FROM sm.status_desc::text)) = 'not yet started'::text THEN 'To Do'::text::character varying
                     ELSE sm.status_desc
                 END AS status_desc,
-            sh.assignee,
+            NULL::character varying AS assignee,
             sh.created_at,
             sh.created_by,
                 CASE
@@ -736,8 +736,6 @@ CREATE OR REPLACE VIEW sts_ts.view_recent_activities
                     ELSE 'STATUS_CHANGE'::text
                 END AS activity_type,
                 CASE
-                    WHEN lower(TRIM(BOTH FROM sm.status_desc::text)) = 'not yet started'::text AND sh.assignee IS NOT NULL AND sh.assignee::text = sh.created_by::text THEN ('Subtask #'::text || st.id::text) || ' assigned to self'::text
-                    WHEN lower(TRIM(BOTH FROM sm.status_desc::text)) = 'not yet started'::text AND sh.assignee IS NOT NULL THEN ('Subtask #'::text || st.id::text) || ' assigned'::text
                     WHEN lower(TRIM(BOTH FROM sm.status_desc::text)) = 'not yet started'::text THEN ('Subtask #'::text || st.id::text) || ' created'::text
                     WHEN lower(TRIM(BOTH FROM sm.status_desc::text)) = 'in progress'::text THEN ('Subtask #'::text || st.id::text) || ' started'::text
                     WHEN lower(TRIM(BOTH FROM sm.status_desc::text)) = ANY (ARRAY['completed'::text, 'closed'::text]) THEN ('Subtask #'::text || st.id::text) || ' completed'::text
@@ -759,120 +757,6 @@ CREATE OR REPLACE VIEW sts_ts.view_recent_activities
                   ORDER BY sh_prev.created_at DESC, sh_prev.id DESC
                  LIMIT 1) prev_hist ON true
           WHERE sh.status_code IS NOT NULL AND (prev_hist.status_code IS NULL OR prev_hist.status_code::text <> sh.status_code::text)
-        ), subtask_priority_activities AS (
-         SELECT t.epic_code,
-            e.epic_title,
-            e.epic_description,
-            sh.subtask_code AS entity_code,
-            'SUBTASK'::text AS entity_type,
-            'Priority changed to '::text || COALESCE(pr.priority_desc, 'Unknown'::text::character varying)::text AS status_desc,
-            sh.assignee,
-            sh.created_at,
-            sh.created_by,
-            'PRIORITY_CHANGE'::text AS activity_type,
-            (('Subtask #'::text || st.id::text) || ' priority changed to '::text) || COALESCE(pr.priority_desc, 'Unknown'::text::character varying)::text AS activity_description,
-            st.subtask_title AS entity_title,
-            st.description AS entity_description,
-            t.id AS task_id,
-            t.task_title
-           FROM subtask_hist sh
-             JOIN subtasks st ON sh.subtask_code = st.id
-             JOIN tasks t ON st.task_id = t.id
-             JOIN epics e ON t.epic_code = e.id
-             LEFT JOIN sts_new.tkt_priority_master pr ON sh.priority_code = pr.priority_code
-             LEFT JOIN LATERAL ( SELECT sh_prev.priority_code
-                   FROM subtask_hist sh_prev
-                  WHERE sh_prev.subtask_code = sh.subtask_code AND (sh_prev.created_at < sh.created_at OR sh_prev.created_at = sh.created_at AND sh_prev.id < sh.id)
-                  ORDER BY sh_prev.created_at DESC, sh_prev.id DESC
-                 LIMIT 1) prev_hist ON true
-          WHERE sh.priority_code IS NOT NULL AND prev_hist.priority_code IS NOT NULL AND prev_hist.priority_code <> sh.priority_code
-        ), subtask_assignee_activities AS (
-         SELECT t.epic_code,
-            e.epic_title,
-            e.epic_description,
-            sh.subtask_code AS entity_code,
-            'SUBTASK'::text AS entity_type,
-                CASE
-                    WHEN sh.assignee::text = sh.created_by::text THEN 'Assigned to self'::text
-                    WHEN prev_hist.assignee IS NULL THEN 'Assigned to '::text || COALESCE(um_assignee_sub.user_name, sh.assignee, 'Unknown'::text::character varying)::text
-                    ELSE 'Assignee changed to '::text || COALESCE(um_assignee_sub.user_name, sh.assignee, 'Unknown'::text::character varying)::text
-                END AS status_desc,
-            sh.assignee,
-            sh.created_at,
-            sh.created_by,
-            'ASSIGNEE_CHANGE'::text AS activity_type,
-                CASE
-                    WHEN sh.assignee::text = sh.created_by::text THEN ('Subtask #'::text || st.id::text) || ' assigned to self'::text
-                    WHEN prev_hist.assignee IS NULL THEN (('Subtask #'::text || st.id::text) || ' assigned to '::text) || COALESCE(um_assignee_sub.user_name, sh.assignee, 'Unknown'::text::character varying)::text
-                    ELSE (('Subtask #'::text || st.id::text) || ' assignee changed to '::text) || COALESCE(um_assignee_sub.user_name, sh.assignee, 'Unknown'::text::character varying)::text
-                END AS activity_description,
-            st.subtask_title AS entity_title,
-            st.description AS entity_description,
-            t.id AS task_id,
-            t.task_title
-           FROM subtask_hist sh
-             JOIN subtasks st ON sh.subtask_code = st.id
-             JOIN tasks t ON st.task_id = t.id
-             JOIN epics e ON t.epic_code = e.id
-             LEFT JOIN sts_new.user_master um_assignee_sub ON sh.assignee::text = um_assignee_sub.user_code::text
-             LEFT JOIN LATERAL ( SELECT sh_prev.assignee
-                   FROM subtask_hist sh_prev
-                  WHERE sh_prev.subtask_code = sh.subtask_code AND (sh_prev.created_at < sh.created_at OR sh_prev.created_at = sh.created_at AND sh_prev.id < sh.id)
-                  ORDER BY sh_prev.created_at DESC, sh_prev.id DESC
-                 LIMIT 1) prev_hist ON true
-          WHERE sh.assignee IS NOT NULL AND (prev_hist.assignee IS NULL OR prev_hist.assignee::text <> sh.assignee::text)
-        ), subtask_estimated_hours_activities AS (
-         SELECT t.epic_code,
-            e.epic_title,
-            e.epic_description,
-            sh.subtask_code AS entity_code,
-            'SUBTASK'::text AS entity_type,
-            'Estimated hours changed to '::text || sh.estimated_hours::text AS status_desc,
-            sh.assignee,
-            sh.created_at,
-            sh.created_by,
-            'HOURS_CHANGE'::text AS activity_type,
-            (('Subtask #'::text || st.id::text) || ' estimated hours changed to '::text) || sh.estimated_hours::text AS activity_description,
-            st.subtask_title AS entity_title,
-            st.description AS entity_description,
-            t.id AS task_id,
-            t.task_title
-           FROM subtask_hist sh
-             JOIN subtasks st ON sh.subtask_code = st.id
-             JOIN tasks t ON st.task_id = t.id
-             JOIN epics e ON t.epic_code = e.id
-             LEFT JOIN LATERAL ( SELECT sh_prev.estimated_hours
-                   FROM subtask_hist sh_prev
-                  WHERE sh_prev.subtask_code = sh.subtask_code AND (sh_prev.created_at < sh.created_at OR sh_prev.created_at = sh.created_at AND sh_prev.id < sh.id)
-                  ORDER BY sh_prev.created_at DESC, sh_prev.id DESC
-                 LIMIT 1) prev_hist ON true
-          WHERE sh.estimated_hours IS NOT NULL AND prev_hist.estimated_hours IS NOT NULL AND prev_hist.estimated_hours <> sh.estimated_hours
-        ), subtask_estimated_days_activities AS (
-         SELECT t.epic_code,
-            e.epic_title,
-            e.epic_description,
-            sh.subtask_code AS entity_code,
-            'SUBTASK'::text AS entity_type,
-            'Estimated days changed to '::text || sh.estimated_days::text AS status_desc,
-            sh.assignee,
-            sh.created_at,
-            sh.created_by,
-            'DAYS_CHANGE'::text AS activity_type,
-            (('Subtask #'::text || st.id::text) || ' estimated days changed to '::text) || sh.estimated_days::text AS activity_description,
-            st.subtask_title AS entity_title,
-            st.description AS entity_description,
-            t.id AS task_id,
-            t.task_title
-           FROM subtask_hist sh
-             JOIN subtasks st ON sh.subtask_code = st.id
-             JOIN tasks t ON st.task_id = t.id
-             JOIN epics e ON t.epic_code = e.id
-             LEFT JOIN LATERAL ( SELECT sh_prev.estimated_days
-                   FROM subtask_hist sh_prev
-                  WHERE sh_prev.subtask_code = sh.subtask_code AND (sh_prev.created_at < sh.created_at OR sh_prev.created_at = sh.created_at AND sh_prev.id < sh.id)
-                  ORDER BY sh_prev.created_at DESC, sh_prev.id DESC
-                 LIMIT 1) prev_hist ON true
-          WHERE sh.estimated_days IS NOT NULL AND prev_hist.estimated_days IS NOT NULL AND prev_hist.estimated_days <> sh.estimated_days
         )
  SELECT all_activities.epic_code,
     all_activities.epic_title,
@@ -1333,75 +1217,7 @@ CREATE OR REPLACE VIEW sts_ts.view_recent_activities
             subtask_status_activities.entity_description,
             subtask_status_activities.task_id,
             subtask_status_activities.task_title
-           FROM subtask_status_activities
-        UNION ALL
-         SELECT subtask_priority_activities.epic_code,
-            subtask_priority_activities.epic_title,
-            subtask_priority_activities.epic_description,
-            subtask_priority_activities.entity_code,
-            subtask_priority_activities.entity_type,
-            subtask_priority_activities.status_desc,
-            subtask_priority_activities.assignee,
-            subtask_priority_activities.created_at,
-            subtask_priority_activities.created_by,
-            subtask_priority_activities.activity_type,
-            subtask_priority_activities.activity_description,
-            subtask_priority_activities.entity_title,
-            subtask_priority_activities.entity_description,
-            subtask_priority_activities.task_id,
-            subtask_priority_activities.task_title
-           FROM subtask_priority_activities
-        UNION ALL
-         SELECT subtask_assignee_activities.epic_code,
-            subtask_assignee_activities.epic_title,
-            subtask_assignee_activities.epic_description,
-            subtask_assignee_activities.entity_code,
-            subtask_assignee_activities.entity_type,
-            subtask_assignee_activities.status_desc,
-            subtask_assignee_activities.assignee,
-            subtask_assignee_activities.created_at,
-            subtask_assignee_activities.created_by,
-            subtask_assignee_activities.activity_type,
-            subtask_assignee_activities.activity_description,
-            subtask_assignee_activities.entity_title,
-            subtask_assignee_activities.entity_description,
-            subtask_assignee_activities.task_id,
-            subtask_assignee_activities.task_title
-           FROM subtask_assignee_activities
-        UNION ALL
-         SELECT subtask_estimated_hours_activities.epic_code,
-            subtask_estimated_hours_activities.epic_title,
-            subtask_estimated_hours_activities.epic_description,
-            subtask_estimated_hours_activities.entity_code,
-            subtask_estimated_hours_activities.entity_type,
-            subtask_estimated_hours_activities.status_desc,
-            subtask_estimated_hours_activities.assignee,
-            subtask_estimated_hours_activities.created_at,
-            subtask_estimated_hours_activities.created_by,
-            subtask_estimated_hours_activities.activity_type,
-            subtask_estimated_hours_activities.activity_description,
-            subtask_estimated_hours_activities.entity_title,
-            subtask_estimated_hours_activities.entity_description,
-            subtask_estimated_hours_activities.task_id,
-            subtask_estimated_hours_activities.task_title
-           FROM subtask_estimated_hours_activities
-        UNION ALL
-         SELECT subtask_estimated_days_activities.epic_code,
-            subtask_estimated_days_activities.epic_title,
-            subtask_estimated_days_activities.epic_description,
-            subtask_estimated_days_activities.entity_code,
-            subtask_estimated_days_activities.entity_type,
-            subtask_estimated_days_activities.status_desc,
-            subtask_estimated_days_activities.assignee,
-            subtask_estimated_days_activities.created_at,
-            subtask_estimated_days_activities.created_by,
-            subtask_estimated_days_activities.activity_type,
-            subtask_estimated_days_activities.activity_description,
-            subtask_estimated_days_activities.entity_title,
-            subtask_estimated_days_activities.entity_description,
-            subtask_estimated_days_activities.task_id,
-            subtask_estimated_days_activities.task_title
-           FROM subtask_estimated_days_activities) all_activities
+           FROM subtask_status_activities) all_activities
      LEFT JOIN sts_new.user_master um_created ON all_activities.created_by::text = um_created.user_code::text
      LEFT JOIN sts_new.user_master um_assignee ON all_activities.assignee::text = um_assignee.user_code::text
   ORDER BY all_activities.created_at DESC, all_activities.epic_code;

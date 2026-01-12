@@ -573,16 +573,16 @@ export default function AdminEpicsPage() {
       render: (_: string, record: Epic) => {
         const challengeCount = challengeCounts[String(record.epicId)] || 0;
         return (
-          <div className="text-xs flex items-start gap-2 min-w-[200px] sm:min-w-[280px]">
+        <div className="text-xs flex items-start gap-2 min-w-[200px] sm:min-w-[280px]">
             <Image src="/icons/jira-epic.svg" alt="Epic" width={16} height={16} className="flex-shrink-0 mt-0.5" />
             <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 min-w-0 flex-1">
-              <a
-                href={buildRoleHref(roleBase, `/epics/${record.epicId}`)}
-                onClick={(e) => { e.preventDefault(); router.push(buildRoleHref(roleBase, `/epics/${record.epicId}`)); }}
-                className="text-blue-600 font-medium hover:text-blue-800 hover:underline text-xs flex-shrink-0"
-              >
-                {record.key}
-              </a>
+            <a
+              href={buildRoleHref(roleBase, `/epics/${record.epicId}`)}
+              onClick={(e) => { e.preventDefault(); router.push(buildRoleHref(roleBase, `/epics/${record.epicId}`)); }}
+              className="text-blue-600 font-medium hover:text-blue-800 hover:underline text-xs flex-shrink-0"
+            >
+              {record.key}
+            </a>
               <div className="text-xs text-gray-600 truncate flex-1">{record.title}</div>
               {challengeCount > 0 && (
                 <div 

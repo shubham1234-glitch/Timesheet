@@ -586,13 +586,13 @@ export default function UseExistingEpicContent({ onCreated, onCancel, epicIdForD
       let updatedTasks = prev.map(t =>
         t.id === taskId ? { ...t, [field]: value } : t
       );
-
+      
       // Recompute all task dates based on dependencies and epic start
       updatedTasks = recomputeTaskDates(updatedTasks);
-
+      
       return updatedTasks;
     });
-
+    
     // Removed estimated hours recalculation - tasks no longer have estimated hours in UI
   };
 
@@ -602,10 +602,10 @@ export default function UseExistingEpicContent({ onCreated, onCancel, epicIdForD
 
     // Calculate start date: use epic start date (or today as fallback)
     const newStartDate = startDate || dayjs();
-
+    
     // Default due date: 7 days from start date
     const newDueDate = newStartDate.add(7, "day");
-
+    
     const newTask: PredefinedTask = {
       id: `task-${Date.now()}`,
       title: "",
@@ -1296,7 +1296,7 @@ export default function UseExistingEpicContent({ onCreated, onCancel, epicIdForD
     });
     toast.success("Current epic setup saved as template (stub - no backend yet)");
   };
-       
+
   const taskColumns = [
     {
       title: "Task ID",
@@ -1485,7 +1485,7 @@ export default function UseExistingEpicContent({ onCreated, onCancel, epicIdForD
         const dependencyDueDate = dependencyTask?.dueDate
           ? dayjs(dependencyTask.dueDate, "YYYY-MM-DD")
           : null;
-
+        
         return (
           <DatePicker
             value={date ? dayjs(date, 'YYYY-MM-DD') : null}
@@ -1512,12 +1512,12 @@ export default function UseExistingEpicContent({ onCreated, onCancel, epicIdForD
                 const minDate = getNextWorkingDay(dependencyDueDate).startOf("day");
                 if (current && current < minDate) {
                   return true;
-                }
+              }
               } else if (startDate) {
                 // If no dependency, but epic has a start date, don't allow before epic start
                 if (current && current < startDate.startOf("day")) {
                   return true;
-                }
+              }
               }
 
               return false;

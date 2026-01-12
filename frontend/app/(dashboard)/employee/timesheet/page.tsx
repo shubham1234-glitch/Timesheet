@@ -18,6 +18,16 @@ interface TimeEntry {
   fromDate?: string;
   toDate?: string;
   rejectionReason?: string;
+  /**
+   * Overtime in hours for the underlying task, based on the task's estimated hours.
+   * This is computed across all timesheet entries for the same task (user-wise),
+   * so if a task has 8h estimated and the user logs 4h + 6h, overtimeHours will be 2
+   * for both entries (total 10h - 8h estimated).
+   */
+  overtimeHours?: number;
+  taskCode?: number; // Task code for grouping entries
+  taskEstimatedHours?: number; // Estimated hours for the task
+  taskTotalHours?: number; // Total hours logged for this task (sum of all entries)
   // Additional fields from API
   entryDate?: string;
   rawData?: any; // Store full API response for view mode
@@ -218,6 +228,10 @@ export default function EmployeeTimesheetPage() {
       rejectionReason: apiEntry.rejection_reason || apiEntry.latest_rejection_reason || "",
       entryDate: apiEntry.entry_date,
       rawData: apiEntry,
+      // Store task info for overtime calculation
+      taskCode: apiEntry.task_code ? Number(apiEntry.task_code) : undefined,
+      taskEstimatedHours: apiEntry.task_estimated_hours ? Number(apiEntry.task_estimated_hours) : undefined,
+      taskTotalHours: apiEntry.task_total_actual_hours ? Number(apiEntry.task_total_actual_hours) : undefined,
     };
   };
 
@@ -414,7 +428,45 @@ export default function EmployeeTimesheetPage() {
       });
 
       const dedupedEntries = Array.from(byId.values());
-      const grouped = groupEntriesByDay(dedupedEntries);
+
+      // Compute overtime per task based on task estimated hours (task_estimated_hours)
+      // The API now provides task_total_actual_hours, so we use that instead of aggregating manually
+      const entriesWithOvertime: TimeEntry[] = dedupedEntries.map((entry) => {
+        if (entry.type !== "timesheet") return entry;
+        const raw = entry.rawData || {};
+        const taskCode = Number(raw.task_code ?? entry.taskCode ?? 0);
+        if (!taskCode) return entry;
+
+        // Use task_total_actual_hours from API if available, otherwise fall back to entry's hours
+        const totalFromApi = raw.task_total_actual_hours 
+          ? Number(raw.task_total_actual_hours) 
+          : (entry.taskTotalHours ?? entry.hours ?? 0);
+        
+        const estimated = Number(
+          raw.task_estimated_hours ?? 
+          entry.taskEstimatedHours ?? 
+          0
+        );
+
+        // Update entry with values from API
+        const updatedEntry = {
+          ...entry,
+          taskCode: taskCode,
+          taskEstimatedHours: estimated > 0 ? estimated : entry.taskEstimatedHours,
+          taskTotalHours: totalFromApi > 0 ? totalFromApi : entry.taskTotalHours,
+        };
+
+        // Calculate overtime only if we have both estimated and total hours
+        if (estimated > 0 && totalFromApi > estimated) {
+          updatedEntry.overtimeHours = totalFromApi - estimated;
+        } else {
+          updatedEntry.overtimeHours = 0;
+        }
+
+        return updatedEntry;
+      });
+
+      const grouped = groupEntriesByDay(entriesWithOvertime);
       setEntries(grouped);
     } catch (error) {
       console.error('Error fetching timesheet entries:', error);
@@ -917,11 +969,57 @@ export default function EmployeeTimesheetPage() {
                           )}
                           </div>
                           {(() => {
-                            const hoursValue = typeof entry.hours === 'string' ? parseFloat(entry.hours) : (entry.hours || 0);
-                            if (hoursValue > 8) {
+                            const overtime =
+                              typeof entry.overtimeHours === "number"
+                                ? entry.overtimeHours
+                                : 0;
+                            const estimated =
+                              typeof entry.taskEstimatedHours === "number"
+                                ? entry.taskEstimatedHours
+                                : 0;
+                            // Calculate total: use taskTotalHours if available, otherwise calculate from estimated + overtime
+                            const total =
+                              typeof entry.taskTotalHours === "number" && entry.taskTotalHours > 0
+                                ? entry.taskTotalHours
+                                : (estimated > 0 ? estimated + overtime : 0);
+
+                            // Show overdue info if task is overdue (overtime > 0) and we have estimated hours
+                            if (overtime > 0 && estimated > 0 && total > 0) {
                               return (
-                                <div className="text-[8px] text-orange-600 font-medium">
-                                  Overtime: {(hoursValue - 8).toFixed(1)}h (total {hoursValue.toFixed(1)}h)
+                                <div className="mt-2 pt-2 border-t border-red-100">
+                                  <div className="bg-gradient-to-r from-red-50 to-orange-50 border-l-4 border-red-500 rounded-r-md p-2">
+                                    <div className="flex items-start gap-2">
+                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-red-600 flex-shrink-0 mt-0.5">
+                                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.1"/>
+                                        <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                                      </svg>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="text-[11px] sm:text-xs font-bold text-red-700">
+                                            Overdue: {overtime.toFixed(1)}h
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-[10px] sm:text-[11px]">
+                                          <div className="flex items-center gap-1 bg-white/60 px-1.5 py-0.5 rounded">
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-red-600">
+                                              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                                              <path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="2"/>
+                                            </svg>
+                                            <span className="font-semibold text-red-700">{total.toFixed(1)}h</span>
+                                          </div>
+                                          <span className="text-red-400 font-medium">/</span>
+                                          <div className="flex items-center gap-1 bg-white/60 px-1.5 py-0.5 rounded">
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-gray-500">
+                                              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                                              <path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="2"/>
+                                            </svg>
+                                            <span className="font-semibold text-gray-700">{estimated.toFixed(1)}h</span>
+                                          </div>
+                                          <span className="text-[9px] text-red-600 ml-auto font-medium">Actual / Estimated</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
                               );
                             }

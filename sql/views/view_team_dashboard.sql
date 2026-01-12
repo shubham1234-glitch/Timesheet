@@ -74,36 +74,14 @@ CREATE OR REPLACE VIEW sts_ts.view_team_dashboard
           WHERE t.assignee IS NOT NULL
           GROUP BY t.assignee
         ), user_subtasks AS (
-         SELECT st.assignee AS user_code,
-            count(*) AS total_subtasks_count,
-            count(
-                CASE
-                    WHEN st.status_code::text = 'STS002'::text THEN 1
-                    ELSE NULL::integer
-                END) AS completed_subtasks_count,
-            count(
-                CASE
-                    WHEN st.status_code::text = 'STS007'::text THEN 1
-                    ELSE NULL::integer
-                END) AS in_progress_subtasks_count,
-            count(
-                CASE
-                    WHEN st.status_code::text = 'STS001'::text THEN 1
-                    ELSE NULL::integer
-                END) AS to_do_subtasks_count,
-            count(
-                CASE
-                    WHEN st.status_code::text = 'STS010'::text THEN 1
-                    ELSE NULL::integer
-                END) AS cancelled_subtasks_count,
-            count(
-                CASE
-                    WHEN st.due_date < CURRENT_DATE AND (st.status_code::text <> ALL (ARRAY['STS002'::character varying::text, 'STS010'::character varying::text])) THEN 1
-                    ELSE NULL::integer
-                END) AS overdue_subtasks_count
-           FROM subtasks st
-          WHERE st.assignee IS NOT NULL
-          GROUP BY st.assignee
+         SELECT um_1.user_code,
+            0::bigint AS total_subtasks_count,
+            0::bigint AS completed_subtasks_count,
+            0::bigint AS in_progress_subtasks_count,
+            0::bigint AS to_do_subtasks_count,
+            0::bigint AS cancelled_subtasks_count,
+            0::bigint AS overdue_subtasks_count
+           FROM sts_new.user_master um_1
         ), pending_approvals AS (
          SELECT combined.user_code,
             sum(

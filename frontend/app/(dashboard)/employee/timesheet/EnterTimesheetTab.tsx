@@ -702,7 +702,7 @@ export default function EnterTimesheetTab({
         } else {
           // If submitting (not draft), we need entry_id
           // If it's a new entry, first create it, then submit
-          // If it's an existing entry, submit directly with entry_id
+          // If it's an existing entry, update it first with SUBMITTED status, then submit
           let entryIdToSubmit = existingEntryId;
           
           if (!entryIdToSubmit) {
@@ -730,6 +730,25 @@ export default function EnterTimesheetTab({
             
             if (!entryIdToSubmit) {
               toast.error('Failed to get entry ID after creating timesheet entry');
+              setSubmitting(false);
+              return;
+            }
+          } else {
+            // Existing entry - update it with SUBMITTED status first
+            const updateResponse = await apiRequest<any>('enter_timesheet/', 'POST', formData);
+            
+            // Check response for success
+            const hasExplicitError = 
+              (updateResponse && typeof updateResponse === 'object' && 'success_flag' in updateResponse && updateResponse.success_flag === false) ||
+              (updateResponse && typeof updateResponse === 'object' && 'error' in updateResponse && updateResponse.error);
+
+            if (hasExplicitError) {
+              const errorMsg = (updateResponse && typeof updateResponse === 'object' && 'message' in updateResponse) 
+                ? updateResponse.message 
+                : (updateResponse && typeof updateResponse === 'object' && 'error' in updateResponse)
+                ? updateResponse.error
+                : 'Failed to update timesheet entry';
+              toast.error(errorMsg);
               setSubmitting(false);
               return;
             }
@@ -827,6 +846,13 @@ export default function EnterTimesheetTab({
           });
         }
 
+        // Add approval status
+        if (isDraft) {
+          formData.append('approval_status', 'DRAFT');
+        } else {
+          formData.append('approval_status', 'SUBMITTED');
+        }
+
         // If saving as draft, call enter_timesheet API
         if (isDraft) {
           const response = await apiRequest<any>('enter_timesheet/', 'POST', formData);
@@ -858,7 +884,7 @@ export default function EnterTimesheetTab({
         } else {
           // If submitting (not draft), we need entry_id
           // If it's a new entry, first create it, then submit
-          // If it's an existing entry, submit directly with entry_id
+          // If it's an existing entry, update it first with SUBMITTED status, then submit
           let entryIdToSubmit = existingEntryId;
           
           if (!entryIdToSubmit) {
@@ -886,6 +912,25 @@ export default function EnterTimesheetTab({
             
             if (!entryIdToSubmit) {
               toast.error('Failed to get entry ID after creating timesheet entry');
+              setSubmitting(false);
+              return;
+            }
+          } else {
+            // Existing entry - update it with SUBMITTED status first
+            const updateResponse = await apiRequest<any>('enter_timesheet/', 'POST', formData);
+            
+            // Check response for success
+            const hasExplicitError = 
+              (updateResponse && typeof updateResponse === 'object' && 'success_flag' in updateResponse && updateResponse.success_flag === false) ||
+              (updateResponse && typeof updateResponse === 'object' && 'error' in updateResponse && updateResponse.error);
+
+            if (hasExplicitError) {
+              const errorMsg = (updateResponse && typeof updateResponse === 'object' && 'message' in updateResponse) 
+                ? updateResponse.message 
+                : (updateResponse && typeof updateResponse === 'object' && 'error' in updateResponse)
+                ? updateResponse.error
+                : 'Failed to update timesheet entry';
+              toast.error(errorMsg);
               setSubmitting(false);
               return;
             }
@@ -966,8 +1011,8 @@ export default function EnterTimesheetTab({
       if (isDraft) {
         formData.append('approval_status', 'DRAFT');
       } else {
-        // When submitting (not draft), set status to PENDING
-        formData.append('approval_status', 'PENDING');
+        // When submitting (not draft), set status to SUBMITTED
+        formData.append('approval_status', 'SUBMITTED');
       }
 
       // Optional fields

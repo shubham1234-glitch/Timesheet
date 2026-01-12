@@ -4,6 +4,7 @@ import TaskInfo from './TaskInfo';
 import TabsSection from './TabsSection';
 import AttachmentsSection from './AttachmentsSection';
 import SubTasksTable from './SubTasksTable';
+import type { Comment } from '@/app/components/shared/CommentsTab';
 
 import { EpicAttachment } from "@/app/types/EpicTypes";
 

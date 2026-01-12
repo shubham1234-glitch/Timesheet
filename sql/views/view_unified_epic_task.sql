@@ -99,22 +99,12 @@ CREATE OR REPLACE VIEW sts_ts.view_unified_epic_task
            FROM attachments a
           WHERE a.parent_type::text = 'TASK'::text AND a.parent_code = t.id) AS task_attachments_count,
     COALESCE(subtask_stats.subtask_count, 0::bigint) AS task_subtask_count,
-    COALESCE(subtask_stats.total_subtask_estimated_hours, 0::numeric) AS total_subtask_estimated_hours,
-    COALESCE(subtask_stats.total_subtask_estimated_days, 0::numeric) AS total_subtask_estimated_days,
-    COALESCE(( SELECT json_agg(json_build_object('id', st.id, 'subtask_title', st.subtask_title, 'description', st.description, 'status_code', COALESCE(sh_latest.status_code, st.status_code), 'status_description', sm_subtask.status_desc, 'priority_code', COALESCE(sh_latest.priority_code, st.priority_code), 'priority_description', pr_subtask.priority_desc, 'assignee', COALESCE(sh_latest.assignee, st.assignee), 'assignee_name', um_subtask_assignee.user_name, 'assigned_team_code', COALESCE(sh_latest.assigned_team_code, st.assigned_team_code), 'assigned_team_name', tm_subtask.team_name, 'work_mode', COALESCE(sh_latest.work_mode, st.work_mode), 'start_date', COALESCE(sh_latest.start_date, st.start_date), 'due_date', COALESCE(sh_latest.due_date, st.due_date), 'closed_on', COALESCE(sh_latest.closed_on, st.closed_on), 'estimated_hours', COALESCE(sh_latest.estimated_hours, st.estimated_hours), 'estimated_days', COALESCE(sh_latest.estimated_days, st.estimated_days), 'is_billable', st.is_billable, 'cancelled_by', COALESCE(sh_latest.cancelled_by, st.cancelled_by), 'cancelled_at', COALESCE(sh_latest.cancelled_at, st.cancelled_at), 'created_by', st.created_by, 'created_at', st.created_at, 'updated_by', st.updated_by, 'updated_at', st.updated_at, 'attachments_count', ( SELECT count(*) AS count
+    COALESCE(( SELECT json_agg(json_build_object('id', st.id, 'subtask_title', st.subtask_title, 'description', st.description, 'status_code', COALESCE(sh_latest.status_code, st.status_code), 'status_description', sm_subtask.status_desc, 'closed_on', COALESCE(sh_latest.closed_on, st.closed_on), 'is_billable', st.is_billable, 'cancelled_by', COALESCE(sh_latest.cancelled_by, st.cancelled_by), 'cancelled_at', COALESCE(sh_latest.cancelled_at, st.cancelled_at), 'created_by', st.created_by, 'created_at', st.created_at, 'updated_by', st.updated_by, 'updated_at', st.updated_at, 'attachments_count', ( SELECT count(*) AS count
                    FROM attachments a
                   WHERE a.parent_type::text = 'SUBTASK'::text AND a.parent_code = st.id)) ORDER BY st.id) AS json_agg
            FROM subtasks st
              LEFT JOIN LATERAL ( SELECT sh.status_code,
-                    sh.priority_code,
-                    sh.assigned_team_code,
-                    sh.assignee,
-                    sh.work_mode,
-                    sh.start_date,
-                    sh.due_date,
                     sh.closed_on,
-                    sh.estimated_hours,
-                    sh.estimated_days,
                     sh.cancelled_by,
                     sh.cancelled_at
                    FROM subtask_hist sh
@@ -122,15 +112,24 @@ CREATE OR REPLACE VIEW sts_ts.view_unified_epic_task
                   ORDER BY sh.created_at DESC, sh.id DESC
                  LIMIT 1) sh_latest ON true
              LEFT JOIN sts_new.status_master sm_subtask ON COALESCE(sh_latest.status_code, st.status_code)::text = sm_subtask.status_code::text
-             LEFT JOIN sts_new.tkt_priority_master pr_subtask ON COALESCE(sh_latest.priority_code, st.priority_code) = pr_subtask.priority_code
-             LEFT JOIN sts_new.user_master um_subtask_assignee ON COALESCE(sh_latest.assignee, st.assignee)::text = um_subtask_assignee.user_code::text
-             LEFT JOIN sts_new.team_master tm_subtask ON COALESCE(sh_latest.assigned_team_code, st.assigned_team_code)::text = tm_subtask.team_code::text
           WHERE st.task_id = t.id), '[]'::json) AS task_subtasks,
     ( SELECT count(*) AS count
            FROM attachments a
           WHERE a.parent_type::text = 'SUBTASK'::text AND (a.parent_code IN ( SELECT st.id
                    FROM subtasks st
-                  WHERE st.task_id = t.id))) AS task_subtasks_attachments_count
+                  WHERE st.task_id = t.id))) AS task_subtasks_attachments_count,
+    COALESCE(( SELECT json_agg(td.depends_on_task_id ORDER BY td.depends_on_task_id) AS json_agg
+           FROM task_dependencies td
+          WHERE td.task_id = t.id), '[]'::json) AS task_depends_on_task_ids,
+    ( SELECT count(*) AS count
+           FROM task_dependencies td
+          WHERE td.task_id = t.id) AS task_depends_on_task_count,
+    COALESCE(( SELECT json_agg(td.task_id ORDER BY td.task_id) AS json_agg
+           FROM task_dependencies td
+          WHERE td.depends_on_task_id = t.id), '[]'::json) AS task_depended_on_by_task_ids,
+    ( SELECT count(*) AS count
+           FROM task_dependencies td
+          WHERE td.depends_on_task_id = t.id) AS task_depended_on_by_task_count
    FROM epics e
      LEFT JOIN LATERAL ( SELECT eh.status_code,
             eh.status_reason,
@@ -194,16 +193,14 @@ CREATE OR REPLACE VIEW sts_ts.view_unified_epic_task
      LEFT JOIN sts_new.user_master updated_by_task_user ON t.updated_by::text = updated_by_task_user.user_code::text
      LEFT JOIN sts_new.user_master cancelled_by_task_user ON COALESCE(th_latest.cancelled_by, t.cancelled_by)::text = cancelled_by_task_user.user_code::text
      LEFT JOIN ( SELECT st_stats.task_id,
-            count(*) AS subtask_count,
-            sum(st_stats.estimated_hours) AS total_subtask_estimated_hours,
-            sum(st_stats.estimated_days) AS total_subtask_estimated_days
+            count(*) AS subtask_count
            FROM subtasks st_stats
           GROUP BY st_stats.task_id) subtask_stats ON t.id = subtask_stats.task_id;
 
 ALTER TABLE sts_ts.view_unified_epic_task
     OWNER TO sts_ts;
 COMMENT ON VIEW sts_ts.view_unified_epic_task
-    IS 'Comprehensive view showing actual epics, tasks, and subtasks (created by users). Tasks are shown as individual rows (one row per task). Each task row includes subtask statistics and a JSON array of all subtasks. Predefined epics and tasks are available via master data API and are not included in this view.';
+    IS 'Comprehensive view showing actual epics, tasks, and subtasks (created by users). Tasks are shown as individual rows (one row per task). Each task row includes subtask statistics, a JSON array of all subtasks, and task dependency information (depends_on_task_ids, depends_on_task_count, depended_on_by_task_ids, depended_on_by_task_count). Predefined epics and tasks are available via master data API and are not included in this view.';
 
 GRANT ALL ON TABLE sts_ts.view_unified_epic_task TO sts_ts;
 GRANT SELECT ON TABLE sts_ts.view_unified_epic_task TO sukraa_analyst;

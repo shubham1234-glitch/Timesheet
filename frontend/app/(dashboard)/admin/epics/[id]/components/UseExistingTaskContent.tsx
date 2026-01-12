@@ -60,6 +60,9 @@ const addWorkingDays = (startDate: dayjs.Dayjs, workingDays: number): dayjs.Dayj
 };
 
 const UseExistingTaskContent: React.FC<UseExistingTaskContentProps> = ({ epicId, onCreated, onCancel }) => {
+  // When epicId is provided, this flow is used to create a task under an epic from a template.
+  // When epicId is undefined (accessed from /admin/tasks/use-existing), we are updating the task template.
+  const isCreateMode = !!epicId;
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<PredefinedTaskTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
@@ -474,121 +477,200 @@ const UseExistingTaskContent: React.FC<UseExistingTaskContentProps> = ({ epicId,
 
     setLoading(true);
     try {
-      // Use URLSearchParams for application/x-www-form-urlencoded
-      const params = new URLSearchParams();
-
-      // Required fields for update_predefined_task
-      if (taskTitle) {
-        params.append("task_title", taskTitle);
-      }
-      if (description) {
-        params.append("task_description", description);
-      }
-      if (priority) {
-        params.append("priority_code", String(priority));
-      }
-      // Task type (optional)
-      if (taskType) {
-        params.append("task_type_code", String(taskType));
-      }
-      if (workMode) {
-        // Ensure we always send a valid work mode code
-        let workModeCode = workMode;
-        try {
-          const locations = getWorkLocationOptions();
-          const matched = locations.find(
-            (loc) =>
-              String(loc.value).toUpperCase() === String(workMode).toUpperCase() ||
-              String(loc.label).toLowerCase() === String(workMode).toLowerCase()
-          );
-          if (matched) {
-            workModeCode = String(matched.value);
+      // If epicId is provided, we're creating a task under an epic - use use_existing_task API
+      if (isCreateMode && epicId) {
+        // Use FormData for multipart/form-data (supports file attachments)
+        const formData = new FormData();
+        
+        // Required fields
+        formData.append('predefined_task_id', String(selectedTemplate.predefinedTaskId));
+        formData.append('epic_code', String(epicId));
+        
+        // Optional fields that override template defaults
+        if (taskTitle) {
+          formData.append('task_title', taskTitle);
+        }
+        if (description) {
+          formData.append('task_description', description);
+        }
+        if (assignee) {
+          formData.append('assignee', assignee);
+        }
+        
+        // Get team_code: prioritize from assignee, fallback to selected team
+        let teamCodeToSend: string | null = null;
+        if (assignee) {
+          try {
+            const md = getMasterDataFromCache<import("@/app/lib/masterData").MasterApiResponse>();
+            const employees = md?.data?.employees || [];
+            const assigneeCode = assignee.trim().toUpperCase();
+            const emp = employees.find((e: any) => String(e.user_code).toUpperCase() === assigneeCode);
+            if (emp?.team_code) {
+              teamCodeToSend = String(emp.team_code);
+            }
+          } catch {
+            // Ignore failures
           }
-        } catch {
-          // If we can't resolve, fall back to sending whatever is in workMode
         }
-        params.append("work_mode", workModeCode);
-      }
-
-      // Get team_code: prioritize from assignee, fallback to selected team
-      let teamCodeToSend: string | null = null;
-      if (assignee) {
-        // Try to derive team_code from master data for the selected assignee
-        try {
-          const md = getMasterDataFromCache<import("@/app/lib/masterData").MasterApiResponse>();
-          const employees = md?.data?.employees || [];
-          const assigneeCode = assignee.trim().toUpperCase();
-          const emp = employees.find((e: any) => String(e.user_code).toUpperCase() === assigneeCode);
-          if (emp?.team_code) {
-            teamCodeToSend = String(emp.team_code);
+        if (!teamCodeToSend && team) {
+          teamCodeToSend = String(team);
+        }
+        if (teamCodeToSend) {
+          formData.append('assigned_team_code', teamCodeToSend);
+        }
+        
+        if (priority) {
+          formData.append('priority_code', String(priority));
+        }
+        if (taskType) {
+          formData.append('task_type_code', String(taskType));
+        }
+        if (workMode) {
+          // Ensure we always send a valid work mode code
+          let workModeCode = workMode;
+          try {
+            const locations = getWorkLocationOptions();
+            const matched = locations.find(
+              (loc) =>
+                String(loc.value).toUpperCase() === String(workMode).toUpperCase() ||
+                String(loc.label).toLowerCase() === String(workMode).toLowerCase()
+            );
+            if (matched) {
+              workModeCode = String(matched.value);
+            }
+          } catch {
+            // If we can't resolve, fall back to sending whatever is in workMode
           }
-        } catch {
-          // Ignore failures
+          formData.append('work_mode', workModeCode);
         }
-      }
-      // If no team_code from assignee, use selected team
-      if (!teamCodeToSend && team) {
-        teamCodeToSend = String(team);
-      }
-      // Send team_code if we have one
-      if (teamCodeToSend) {
-        params.append("team_code", teamCodeToSend);
-      }
-
-      // Estimated hours and days
-      if (estHours != null && estHours > 0) {
-        params.append("estimated_hours", String(estHours));
-      }
-      if (estimatedDays != null && estimatedDays > 0) {
-        params.append("estimated_days", String(estimatedDays));
-      }
-
-      // Get predefined_epic_id from the selected template if available
-      // We need to check if the template is linked to an epic
-      let predefinedEpicId: number | null = null;
-      try {
-        const md = getMasterDataFromCache<any>();
-        const masterTasks = md?.data?.predefined_tasks || [];
-        const taskData = masterTasks.find((t: any) => Number(t.id) === selectedTemplate.predefinedTaskId);
-        if (taskData?.predefined_epic_id) {
-          predefinedEpicId = Number(taskData.predefined_epic_id);
+        if (startDate) {
+          formData.append('start_date', startDate.format('YYYY-MM-DD'));
         }
-      } catch {
-        // Ignore if we can't find it
-      }
-      // If epicId is provided in props, use it (for linking/unlinking)
-      if (epicId) {
-        // Try to find the predefined_epic_id from the epicId
+        if (dueDate) {
+          formData.append('due_date', dueDate.format('YYYY-MM-DD'));
+        }
+        if (estHours != null && estHours > 0) {
+          formData.append('estimated_hours', String(estHours));
+        }
+        if (estimatedDays != null && estimatedDays > 0) {
+          formData.append('estimated_days', String(estimatedDays));
+        }
+        
+        // Handle file attachments
+        if (files && files.length > 0) {
+          files.forEach((file) => {
+            formData.append('attachments', file);
+          });
+        }
+        
+        // Call use_existing_task API
+        const response: any = await apiRequest('use_existing_task', 'POST', formData);
+        toast.success(response?.message || response?.Status_Description || "Task created successfully");
+        try { onCreated && onCreated(); } catch { }
+      } else {
+        // If epicId is not provided, we're updating the task template - use update_predefined_task API
+        // Use URLSearchParams for application/x-www-form-urlencoded
+        const params = new URLSearchParams();
+
+        // Required fields for update_predefined_task
+        if (taskTitle) {
+          params.append("task_title", taskTitle);
+        }
+        if (description) {
+          params.append("task_description", description);
+        }
+        if (priority) {
+          params.append("priority_code", String(priority));
+        }
+        // Task type (optional)
+        if (taskType) {
+          params.append("task_type_code", String(taskType));
+        }
+        if (workMode) {
+          // Ensure we always send a valid work mode code
+          let workModeCode = workMode;
+          try {
+            const locations = getWorkLocationOptions();
+            const matched = locations.find(
+              (loc) =>
+                String(loc.value).toUpperCase() === String(workMode).toUpperCase() ||
+                String(loc.label).toLowerCase() === String(workMode).toLowerCase()
+            );
+            if (matched) {
+              workModeCode = String(matched.value);
+            }
+          } catch {
+            // If we can't resolve, fall back to sending whatever is in workMode
+          }
+          params.append("work_mode", workModeCode);
+        }
+
+        // Get team_code: prioritize from assignee, fallback to selected team
+        let teamCodeToSend: string | null = null;
+        if (assignee) {
+          // Try to derive team_code from master data for the selected assignee
+          try {
+            const md = getMasterDataFromCache<import("@/app/lib/masterData").MasterApiResponse>();
+            const employees = md?.data?.employees || [];
+            const assigneeCode = assignee.trim().toUpperCase();
+            const emp = employees.find((e: any) => String(e.user_code).toUpperCase() === assigneeCode);
+            if (emp?.team_code) {
+              teamCodeToSend = String(emp.team_code);
+            }
+          } catch {
+            // Ignore failures
+          }
+        }
+        // If no team_code from assignee, use selected team
+        if (!teamCodeToSend && team) {
+          teamCodeToSend = String(team);
+        }
+        // Send team_code if we have one
+        if (teamCodeToSend) {
+          params.append("team_code", teamCodeToSend);
+        }
+
+        // Estimated hours and days
+        if (estHours != null && estHours > 0) {
+          params.append("estimated_hours", String(estHours));
+        }
+        if (estimatedDays != null && estimatedDays > 0) {
+          params.append("estimated_days", String(estimatedDays));
+        }
+
+        // Get predefined_epic_id from the selected template if available
+        // We need to check if the template is linked to an epic
+        let predefinedEpicId: number | null = null;
         try {
           const md = getMasterDataFromCache<any>();
-          const masterEpics = md?.data?.predefined_epics || [];
-          const epicData = masterEpics.find((e: any) => String(e.id) === String(epicId));
-          if (epicData?.id) {
-            predefinedEpicId = Number(epicData.id);
+          const masterTasks = md?.data?.predefined_tasks || [];
+          const taskData = masterTasks.find((t: any) => Number(t.id) === selectedTemplate.predefinedTaskId);
+          if (taskData?.predefined_epic_id) {
+            predefinedEpicId = Number(taskData.predefined_epic_id);
           }
         } catch {
-          // If not found, we'll send null to unlink
+          // Ignore if we can't find it
         }
-      }
-      // Only append predefined_epic_id if we have a value
-      // If omitted, the backend will keep the existing value
-      // To unlink, we would need to send null, but since URLSearchParams doesn't support null,
-      // we'll omit it and let the backend handle it
-      if (predefinedEpicId !== null) {
-        params.append("predefined_epic_id", String(predefinedEpicId));
-      }
+        // Only append predefined_epic_id if we have a value
+        // If omitted, the backend will keep the existing value
+        // To unlink, we would need to send null, but since URLSearchParams doesn't support null,
+        // we'll omit it and let the backend handle it
+        if (predefinedEpicId !== null) {
+          params.append("predefined_epic_id", String(predefinedEpicId));
+        }
 
-      // Note: status_code and is_billable are not in the form, so we'll skip them
-      // They can be added later if needed
+        // Note: status_code and is_billable are not in the form, so we'll skip them
+        // They can be added later if needed
 
-      // Call update_predefined_task API
-      const predefinedTaskId = selectedTemplate.predefinedTaskId;
-      const endpoint = `update_predefined_task/${predefinedTaskId}`;
-      const response: any = await apiRequest(endpoint, "PUT", params);
-      toast.success(response?.message || response?.Status_Description || "Task template updated successfully");
-      try { onCreated && onCreated(); } catch { }
+        // Call update_predefined_task API
+        const predefinedTaskId = selectedTemplate.predefinedTaskId;
+        const endpoint = `update_predefined_task/${predefinedTaskId}`;
+        const response: any = await apiRequest(endpoint, "PUT", params);
+        toast.success(response?.message || response?.Status_Description || "Task template updated successfully");
+        try { onCreated && onCreated(); } catch { }
+      }
     } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : "Failed to update task template";
+      const errorMessage = e instanceof Error ? e.message : (isCreateMode ? "Failed to create task" : "Failed to update task template");
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -986,7 +1068,13 @@ const UseExistingTaskContent: React.FC<UseExistingTaskContentProps> = ({ epicId,
               size="middle"
               className="px-6 rounded-md bg-blue-600 hover:bg-blue-700"
             >
-              {loading ? "Updating..." : "Update Task"}
+              {loading
+                ? isCreateMode
+                  ? "Creating..."
+                  : "Updating..."
+                : isCreateMode
+                ? "Create Task"
+                : "Update Task"}
             </Button>
           </div>
         </>

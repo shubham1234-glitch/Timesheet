@@ -5,7 +5,7 @@ import { useState } from "react";
 import LeftPanel from "@/app/(dashboard)/employee/tasks/[id]/components/LeftPanel";
 import RightPanel from "@/app/(dashboard)/employee/tasks/[id]/components/RightPanel";
 import type { TaskData } from "@/app/(dashboard)/employee/tasks/[id]/types";
-import type { Comment } from "@/app/components/shared/CommentsTab";
+import type { Comment as CommentType } from "@/app/components/shared/CommentsTab";
 import type { EpicAttachment } from "@/app/types/EpicTypes";
 import { getUserFromStorage } from "@/app/lib/auth/storage";
 
@@ -41,7 +41,7 @@ export default function AdminAvailableTaskDetailsPage() {
   const [taskAttachments] = useState<EpicAttachment[]>([]);
   const [activeTab, setActiveTab] = useState("activity");
   const [commentText, setCommentText] = useState("");
-  const [comments, setComments] = useState<Comment[]>([]);
+  const [comments, setComments] = useState<CommentType[]>([]);
 
   const handleTaskDataChange = (
     field: keyof TaskData,
@@ -73,7 +73,7 @@ export default function AdminAvailableTaskDetailsPage() {
     const user = getUserFromStorage();
     const userName = user?.userName || "User";
     const currentDate = new Date().toLocaleDateString();
-    const newComment: Comment = {
+    const newComment: CommentType = {
       text,
       author: userName,
       date: currentDate,

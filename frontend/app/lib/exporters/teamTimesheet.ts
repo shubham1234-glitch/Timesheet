@@ -147,7 +147,7 @@ export function exportTeamTimesheetToPDF(
     }) : '';
     
     const taskOrTitle = entry.type === 'timesheet' 
-      ? (entry.task || entry.title || '') 
+      ? (entry.task || entry.title || '')
       : (entry.leaveType || '');
     
     const type = entry.type === 'timesheet' ? 'Timesheet' : 'Leave';
@@ -166,6 +166,36 @@ export function exportTeamTimesheetToPDF(
       xPos += colWidths[index];
     });
     yPos += lineHeight + 2;
+
+    // Add rejection reason below the row if status is Rejected and rejection reason exists
+    if (status === 'Rejected' && entry.rejectionReason) {
+      // Check if we need a new page for the rejection reason
+      if (yPos > maxY - lineHeight) {
+        doc.addPage();
+        yPos = startY;
+      }
+      
+      const totalWidth = colWidths.reduce((sum, width) => sum + width, 0);
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8);
+      const rejectionText = `Rejection Reason: ${entry.rejectionReason}`;
+      // Split long text into multiple lines if needed
+      const maxWidth = totalWidth - 4;
+      const splitText = doc.splitTextToSize(rejectionText, maxWidth);
+      
+      splitText.forEach((line: string) => {
+        if (yPos > maxY - lineHeight) {
+          doc.addPage();
+          yPos = startY;
+        }
+        doc.text(line, margin + 2, yPos);
+        yPos += lineHeight;
+      });
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      yPos += 2; // Add small spacing after rejection reason
+    }
   });
 
   // Save PDF
